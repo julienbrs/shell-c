@@ -64,11 +64,11 @@ void terminate(char *line) {
 int main() {
         printf("Variante %d: %s\n", VARIANTE, VARIANTE_STRING);
 
-#if USE_GUILE == 1
-        scm_init_guile();
-        /* register "executer" function in scheme */
-        scm_c_define_gsubr("executer", 1, 0, 0, executer_wrapper);
-#endif
+    #if USE_GUILE == 1
+            scm_init_guile();
+            /* register "executer" function in scheme */
+            scm_c_define_gsubr("executer", 1, 0, 0, executer_wrapper);
+    #endif
 
 	while (1) {
 		struct cmdline *l;
@@ -108,9 +108,7 @@ int main() {
 		  
 			terminate(0);
 		}
-		
 
-		
 		if (l->err) {
 			/* Syntax error, read another command */
 			printf("error: %s\n", l->err);
@@ -121,7 +119,8 @@ int main() {
 		if (l->out) printf("out: %s\n", l->out);
 		if (l->bg) printf("background (&)\n");
 
-		/* Display each command of the pipe */
+		/*
+		 Display each command of the pipe */
 		for (i=0; l->seq[i]!=0; i++) {
 			char **cmd = l->seq[i];
 			printf("seq[%d]: ", i);
@@ -132,19 +131,20 @@ int main() {
 		}
 		
 		pid_t pid = fork();
-		int wait_status;
 		switch(pid) {
 			case -1:
 				perror("fork:" );
 				break;
 			case 0:
-				char **argv = (char **)l->seq[0][1];
-				execvp(l->seq[0][0], argv);
-				exit(0);
+				execvp(l->seq[0][0],l->seq[0]);
+				//exit(0);
 				break;
 			default:
-				waitpid(pid, &wait_status, WNOHANG);
-				if (WIFEXITED(wait_status)) {
+				if (l->bg) {
+					waitpid(pid, NULL, WNOHANG);
+				}
+				else {
+					waitpid(pid, NULL, 0);
 					kill(pid, 0);
 				}
 				break;
