@@ -48,6 +48,10 @@ SCM executer_wrapper(SCM x)
 }
 #endif
 
+void jobs(void) {
+	printf("ensishell\n");
+}
+
 
 void terminate(char *line) {
 #if USE_GNU_READLINE == 1
@@ -122,32 +126,54 @@ int main() {
 		if (l->bg) printf("background (&)\n");
 
 		/* Display each command of the pipe */
-		for (i=0; l->seq[i]!=0; i++) {
-			char **cmd = l->seq[i];
-			printf("seq[%d]: ", i);
-                        for (j=0; cmd[j]!=0; j++) {
-                                printf("'%s' ", cmd[j]);
-                        }
-			printf("\n");
+		//for (i=0; l->seq[i]!=0; i++) {
+		//	char **cmd = l->seq[i];
+		//	printf("seq[%d]: ", i);
+        //                for (j=0; cmd[j]!=0; j++) {
+        //                        printf("'%s' ", cmd[j]);
+        //                }
+		//	printf("\n");
+		//}
+		if (l->seq[1] != NULL) {
+			char **arg1 = l->seq[0];
+			char **arg2 = l->seq[1];
+			int tuyau[2];
+			pipe(tuyau);
+			pid_t pid = fork();
+			if(pid == 0) { // si on est dans le fils
+				dup2(tuyau[0], 0);
+				close(tuyau[1]); close(tuyau[0]);
+				execvp(arg2[0],arg2);
+			}
+			dup2(tuyau[1], 1); // ecriture de stdout dans le tuyau
+			close(tuyau[0]); close(tuyau[1]);
+			execvp(arg1[0], arg1); //
 		}
-		
-		pid_t pid = fork();
-		int wait_status;
-		switch(pid) {
-			case -1:
-				perror("fork:" );
-				break;
-			case 0:
-				char **argv = (char **)l->seq[0][1];
-				execvp(l->seq[0][0], argv);
-				exit(0);
-				break;
-			default:
-				waitpid(pid, &wait_status, WNOHANG);
-				if (WIFEXITED(wait_status)) {
+		else {
+			pid_t pid = fork();
+			switch(pid) {
+				case -1:
+					perror("fork:" );
+					break;
+				case 0:
+					if (strcmp(l->seq[0][0], "jobs") == 0) {
+						jobs();
+					}
+					else {
+						execvp(l->seq[0][0], l->seq[0]);
+						exit(0);
+					}
+					break;
+				default:
+					if (l->bg) {
+						waitpid(pid, NULL, WNOHANG);
+					}
+					else {
+						waitpid(pid, NULL, 0);
+					}
 					kill(pid, 0);
-				}
-				break;
+					break;
+			}
 		}
 	}
 }
