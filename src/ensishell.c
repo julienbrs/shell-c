@@ -68,11 +68,11 @@ void terminate(char *line) {
 int main() {
         printf("Variante %d: %s\n", VARIANTE, VARIANTE_STRING);
 
-#if USE_GUILE == 1
-        scm_init_guile();
-        /* register "executer" function in scheme */
-        scm_c_define_gsubr("executer", 1, 0, 0, executer_wrapper);
-#endif
+    #if USE_GUILE == 1
+            scm_init_guile();
+            /* register "executer" function in scheme */
+            scm_c_define_gsubr("executer", 1, 0, 0, executer_wrapper);
+    #endif
 
 	while (1) {
 		struct cmdline *l;
@@ -112,9 +112,7 @@ int main() {
 		  
 			terminate(0);
 		}
-		
 
-		
 		if (l->err) {
 			/* Syntax error, read another command */
 			printf("error: %s\n", l->err);
