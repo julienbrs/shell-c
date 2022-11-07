@@ -184,19 +184,23 @@ int main()
 			{ // si on est dans le fils
 				pid_t pid_2 = fork();
 				if (pid_2 == 0)
-				{					   // si on est dans le fils
-					dup2(tuyau[1], 1); // ecriture de stdout dans le tuyau
-					close(tuyau[0]);
-					close(tuyau[1]);
-					execvp(arg1[0], arg1); //
-				}
-				else
-				{
+				{ // si on est dans le fils
 					dup2(tuyau[0], 0);
 					close(tuyau[1]);
 					close(tuyau[0]);
 					execvp(arg2[0], arg2);
 				}
+				else
+				{
+					dup2(tuyau[1], 1); // ecriture de stdout dans le tuyau
+					close(tuyau[0]);
+					close(tuyau[1]);
+					execvp(arg1[0], arg1); //
+				}
+			}
+			else
+			{
+				waitpid(pid_1, NULL, 0);
 			}
 		}
 		else if (l->seq[0] != NULL)
