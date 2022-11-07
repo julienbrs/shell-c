@@ -58,20 +58,25 @@ void exec_cmd(struct cmdline *l, struct process **process_list)
 		perror("fork:");
 		break;
 	case 0:
+
 		if (strcmp(l->seq[0][0], "jobs") == 0)
 		{
-			print_process_list(process_list);
+			// print_process_list(process_list);
+			exit(1);
 		}
 		else
 		{
 			execvp(l->seq[0][0], l->seq[0]);
-			exit(0);
 		}
 		break;
 	default:
-		add_process(process_list, l->seq[0][0], pid, l->seq[0]);
+		if (strcmp(l->seq[0][0], "jobs") == 0)
+		{
+			print_process_list(process_list);
+		}
 		if (l->bg)
 		{
+			add_process(process_list, l->seq[0][0], pid);
 			waitpid(pid, NULL, WNOHANG);
 		}
 		else

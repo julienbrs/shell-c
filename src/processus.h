@@ -9,9 +9,10 @@
 #include <sys/wait.h> /*waitpid import */ //todo mettre dans .c la struct
 
 /* Struct is a linked list of processes  */
+struct process;
 
 /* Add a process to the list of processes.  */
-void add_process(struct process **process_list, char *name, pid_t pid, char **argv);
+void add_process(struct process **process_list, char *name, pid_t pid);
 
 /* Remove the process to the linked list */
 void remove_process(struct process **process_list, pid_t pid);
