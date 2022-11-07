@@ -13,6 +13,7 @@
 
 #include "variante.h"
 #include "readcmd.h"
+#include "processus.h"
 
 #ifndef VARIANTE
 #error "Variante non défini !!"
@@ -38,53 +39,88 @@ int question6_executer(char *line)
 
 	/* Remove this line when using parsecmd as it will free it */
 	free(line);
-	
+
 	return 0;
 }
 
 SCM executer_wrapper(SCM x)
 {
-        return scm_from_int(question6_executer(scm_to_locale_stringn(x, 0)));
+	return scm_from_int(question6_executer(scm_to_locale_stringn(x, 0)));
 }
 #endif
 
-void jobs(void) {
-	printf("ensishell\n");
+void exec_cmd(struct cmdline *l, struct process **process_list)
+{
+	pid_t pid = fork();
+	switch (pid)
+	{
+	case -1:
+		perror("fork:");
+		break;
+	case 0:
+		if (strcmp(l->seq[0][0], "jobs") == 0)
+		{
+			print_process_list(process_list);
+		}
+		else
+		{
+			execvp(l->seq[0][0], l->seq[0]);
+			exit(0);
+		}
+		break;
+	default:
+		add_process(process_list, l->seq[0][0], pid, l->seq[0]);
+		if (l->bg)
+		{
+			waitpid(pid, NULL, WNOHANG);
+		}
+		else
+		{
+			waitpid(pid, NULL, 0);
+		}
+		kill(pid, 0);
+		break;
+	}
 }
 
-
-void terminate(char *line) {
+void terminate(char *line)
+{
 #if USE_GNU_READLINE == 1
 	/* rl_clear_history() does not exist yet in centOS 6 */
 	clear_history();
 #endif
 	if (line)
-	  free(line);
+		free(line);
 	printf("exit\n");
 	exit(0);
 }
 
+int main()
+{
+	printf("Variante %d: %s\n", VARIANTE, VARIANTE_STRING);
+	/*create list of process*/
+	struct process **process_list = malloc(sizeof(struct process *));
+	*process_list = NULL;
 
-int main() {
-        printf("Variante %d: %s\n", VARIANTE, VARIANTE_STRING);
+#if USE_GUILE == 1
+	scm_init_guile();
+	/* register "executer" function in scheme */
+	scm_c_define_gsubr("executer", 1, 0, 0, executer_wrapper);
+#endif
 
-    #if USE_GUILE == 1
-            scm_init_guile();
-            /* register "executer" function in scheme */
-            scm_c_define_gsubr("executer", 1, 0, 0, executer_wrapper);
-    #endif
-
-	while (1) {
+	while (1)
+	{
 		struct cmdline *l;
-		char *line=0;
-		int i, j;
+		char *line = 0;
+		// int i, j;
 		char *prompt = "ensishell>";
 
 		/* Readline use some internal memory structure that
 		   can not be cleaned at the end of the program. Thus
 		   one memory leak per command seems unavoidable yet */
 		line = readline(prompt);
-		if (line == 0 || ! strncmp(line,"exit", 4)) {
+		if (line == 0 || !strncmp(line, "exit", 4))
+		{
 			terminate(line);
 		}
 
@@ -92,86 +128,80 @@ int main() {
 		add_history(line);
 #endif
 
-
 #if USE_GUILE == 1
 		/* The line is a scheme command */
-		if (line[0] == '(') {
+		if (line[0] == '(')
+		{
 			char catchligne[strlen(line) + 256];
 			sprintf(catchligne, "(catch #t (lambda () %s) (lambda (key . parameters) (display \"mauvaise expression/bug en scheme\n\")))", line);
 			scm_eval_string(scm_from_locale_string(catchligne));
 			free(line);
-                        continue;
-                }
+			continue;
+		}
 #endif
 
 		/* parsecmd free line and set it up to 0 */
-		l = parsecmd( & line);
+		l = parsecmd(&line);
 
 		/* If input stream closed, normal termination */
-		if (!l) {
-		  
+		if (!l)
+		{
+
 			terminate(0);
 		}
 
-		if (l->err) {
+		if (l->err)
+		{
 			/* Syntax error, read another command */
 			printf("error: %s\n", l->err);
 			continue;
 		}
 
-		if (l->in) printf("in: %s\n", l->in);
-		if (l->out) printf("out: %s\n", l->out);
-		if (l->bg) printf("background (&)\n");
+		if (l->in)
+			printf("in: %s\n", l->in);
+		if (l->out)
+			printf("out: %s\n", l->out);
+		if (l->bg)
+			printf("background (&)\n");
 
 		/* Display each command of the pipe */
-		//for (i=0; l->seq[i]!=0; i++) {
+		// for (i=0; l->seq[i]!=0; i++) {
 		//	char **cmd = l->seq[i];
 		//	printf("seq[%d]: ", i);
-        //                for (j=0; cmd[j]!=0; j++) {
-        //                        printf("'%s' ", cmd[j]);
-        //                }
+		//                 for (j=0; cmd[j]!=0; j++) {
+		//                         printf("'%s' ", cmd[j]);
+		//                 }
 		//	printf("\n");
-		//}
-		if (l->seq[1] != NULL) {
+		// }
+		if (l->seq[1] != NULL)
+		{
 			char **arg1 = l->seq[0];
 			char **arg2 = l->seq[1];
 			int tuyau[2];
 			pipe(tuyau);
-			pid_t pid = fork();
-			if(pid == 0) { // si on est dans le fils
-				dup2(tuyau[0], 0);
-				close(tuyau[1]); close(tuyau[0]);
-				execvp(arg2[0],arg2);
+			pid_t pid_1 = fork();
+			if (pid_1 == 0)
+			{ // si on est dans le fils
+				pid_t pid_2 = fork();
+				if (pid_2 == 0)
+				{					   // si on est dans le fils
+					dup2(tuyau[1], 1); // ecriture de stdout dans le tuyau
+					close(tuyau[0]);
+					close(tuyau[1]);
+					execvp(arg1[0], arg1); //
+				}
+				else
+				{
+					dup2(tuyau[0], 0);
+					close(tuyau[1]);
+					close(tuyau[0]);
+					execvp(arg2[0], arg2);
+				}
 			}
-			dup2(tuyau[1], 1); // ecriture de stdout dans le tuyau
-			close(tuyau[0]); close(tuyau[1]);
-			execvp(arg1[0], arg1); //
 		}
-		else {
-			pid_t pid = fork();
-			switch(pid) {
-				case -1:
-					perror("fork:" );
-					break;
-				case 0:
-					if (strcmp(l->seq[0][0], "jobs") == 0) {
-						jobs();
-					}
-					else {
-						execvp(l->seq[0][0], l->seq[0]);
-						exit(0);
-					}
-					break;
-				default:
-					if (l->bg) {
-						waitpid(pid, NULL, WNOHANG);
-					}
-					else {
-						waitpid(pid, NULL, 0);
-					}
-					kill(pid, 0);
-					break;
-			}
+		else if (l->seq[0] != NULL)
+		{
+			exec_cmd(l, process_list);
 		}
 	}
 }
