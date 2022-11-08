@@ -74,6 +74,7 @@ bool is_pid_done(pid_t pid)
     { // error, invalid pid requested or already stated done
       fprintf(stderr, "Value of errno: %d\n", errno);
       fprintf(stderr, "Pid %d invalid . Process already stated done earlier or unrelated pid", pid);
+      return false; 
     }
     else if (result == 0)
     { // process is still running atm

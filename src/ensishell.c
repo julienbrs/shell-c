@@ -10,6 +10,9 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/wait.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 #include "variante.h"
 #include "readcmd.h"
@@ -61,8 +64,8 @@ void exec_cmd(struct cmdline *l, struct process **process_list)
 
 		if (strcmp(l->seq[0][0], "jobs") == 0)
 		{
-			// print_process_list(process_list);
-			exit(1);
+			print_process_list(process_list);
+			exit(0);
 		}
 		else
 		{
@@ -70,10 +73,7 @@ void exec_cmd(struct cmdline *l, struct process **process_list)
 		}
 		break;
 	default:
-		if (strcmp(l->seq[0][0], "jobs") == 0)
-		{
-			print_process_list(process_list);
-		}
+		update_process_list(process_list);
 		if (l->bg)
 		{
 			add_process(process_list, l->seq[0][0], pid);
@@ -83,8 +83,37 @@ void exec_cmd(struct cmdline *l, struct process **process_list)
 		{
 			waitpid(pid, NULL, 0);
 		}
-		kill(pid, 0);
 		break;
+	}
+}
+
+void exec_pipe(struct cmdline *l) {
+	char **arg1 = l->seq[0];
+	char **arg2 = l->seq[1];
+	int tuyau[2];
+	pipe(tuyau);
+	pid_t pid_1 = fork();
+	if (pid_1 == 0)
+	{ // si on est dans le fils
+		pid_t pid_2 = fork();
+		if (pid_2 == 0)
+		{ // si on est dans le fils
+			dup2(tuyau[0], 0);
+			close(tuyau[1]);
+			close(tuyau[0]);
+			execvp(arg2[0], arg2);
+		}
+		else
+		{
+			dup2(tuyau[1], 1); // ecriture de stdout dans le tuyau
+			close(tuyau[0]);
+			close(tuyau[1]);
+			execvp(arg1[0], arg1); //
+		}
+	}
+	else
+	{
+		waitpid(pid_1, NULL, 0);
 	}
 }
 
@@ -161,56 +190,39 @@ int main()
 			printf("error: %s\n", l->err);
 			continue;
 		}
-
-		if (l->in)
-			printf("in: %s\n", l->in);
-		if (l->out)
-			printf("out: %s\n", l->out);
+		int fd_in = -1;
+		int fd_out = -1;
+		if (l->in) {
+			//// ouvrir un descripteur vers l'entree-sortie
+			int fd_in = open(l->in , O_RDONLY);
+			if (fd_in == -1) { perror("open: " ); exit(EXIT_FAILURE);}
+			//// fermer le descripteur standard et dupliquer
+			//// le descripteur ouvert dans le descripteur standard
+			dup2(fd_in, STDIN_FILENO); // STDIN_FILENO == 0
+			//// fermer le descripteur ouvert en double
+			//close(fd);
+		}
+		if (l->out) {
+			// ouvrir un descripteur vers l'entree-sortie
+			fd_out = open(l->out , O_RDWR);
+			if (fd_out == -1) { perror("open: " ); exit(EXIT_FAILURE);}
+			// fermer le descripteur standard et dupliquer
+			// le descripteur ouvert dans le descripteur standard
+			dup2(fd_out, STDOUT_FILENO); // STDOUT_FILENO == 0
+			// fermer le descripteur ouvert en double
+		}
 		if (l->bg)
 			printf("background (&)\n");
 
-		/* Display each command of the pipe */
-		// for (i=0; l->seq[i]!=0; i++) {
-		//	char **cmd = l->seq[i];
-		//	printf("seq[%d]: ", i);
-		//                 for (j=0; cmd[j]!=0; j++) {
-		//                         printf("'%s' ", cmd[j]);
-		//                 }
-		//	printf("\n");
-		// }
 		if (l->seq[1] != NULL)
 		{
-			char **arg1 = l->seq[0];
-			char **arg2 = l->seq[1];
-			int tuyau[2];
-			pipe(tuyau);
-			pid_t pid_1 = fork();
-			if (pid_1 == 0)
-			{ // si on est dans le fils
-				pid_t pid_2 = fork();
-				if (pid_2 == 0)
-				{ // si on est dans le fils
-					dup2(tuyau[0], 0);
-					close(tuyau[1]);
-					close(tuyau[0]);
-					execvp(arg2[0], arg2);
-				}
-				else
-				{
-					dup2(tuyau[1], 1); // ecriture de stdout dans le tuyau
-					close(tuyau[0]);
-					close(tuyau[1]);
-					execvp(arg1[0], arg1); //
-				}
-			}
-			else
-			{
-				waitpid(pid_1, NULL, 0);
-			}
+			exec_pipe(l);
 		}
 		else if (l->seq[0] != NULL)
 		{
 			exec_cmd(l, process_list);
 		}
+		if (l->out) close(fd_out);
+		if (l->in) close(fd_in);
 	}
 }
